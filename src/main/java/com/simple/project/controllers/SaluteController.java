@@ -8,7 +8,6 @@ public class SaluteController {
 
     @GetMapping("/salute")
     public String saySalute() {
-
         return "Hello my friend!";
     }
 }
