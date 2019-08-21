@@ -1,0 +1,52 @@
+//Jenkins pipeline to run tests and deploy to Development
+
+pipeline {
+    agent {
+        dockerfile {
+            filename 'jenkins.Dockerfile'
+            dir 'docker'
+            args '-v $HOME/.m2:/root/.m2'
+        }
+    }
+    stages {
+        stage('Build') {
+            steps {
+                sh 'mvn -B -D skipTests -D spring.profiles.active=master clean package'
+            }
+        }
+        stage('Test') {
+            steps {
+                sh 'mvn -B test'
+            }
+            post {
+                always {
+                    junit 'target/surefire-reports/*.xml'
+                    jacoco(
+                          execPattern: 'target/*.exec',
+                          classPattern: 'target/classes',
+                          sourcePattern: 'src/main/java',
+                          exclusionPattern: 'src/test*'
+                    )
+                }
+            }
+        }
+        stage('Deploy') {
+            steps {
+                script {
+                    withCredentials(bindings: [sshUserPrivateKey(credentialsId: 'Jenkins', keyFileVariable: 'SSH_KEY')]) {
+                        sh 'scp -o StrictHostKeyChecking=no -i $SSH_KEY \
+                            -r target/twelve-zeros-0.0.1-SNAPSHOT.jar oleksii.milovskiy@35.246.220.71:/simple-project/'
+
+                        sh 'ssh -o StrictHostKeyChecking=no -i $SSH_KEY oleksii.milovskiy@35.246.220.71 \
+                            "cd /simple-project/ && ./jenkins_deploy.sh"'
+                    }
+                }
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: 'target/twelve-zeros-0.0.1-SNAPSHOT.jar', fingerprint: true
+                }
+            }
+        }
+    }
+}

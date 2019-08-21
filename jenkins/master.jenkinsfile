@@ -1,0 +1,57 @@
+//Jenkins pipeline to run tests and build documentation
+
+pipeline {
+    agent {
+        dockerfile {
+            filename 'jenkins.Dockerfile'
+            dir 'docker'
+            args '-v $HOME/.m2:/root/.m2'
+        }
+    }
+    stages {
+        stage('Build') {
+            steps {
+                sh 'mvn -B -D skipTests clean package'
+            }
+        }
+        stage('Test') {
+            steps {
+                sh 'mvn test'
+            }
+            post {
+                always {
+                    junit 'target/surefire-reports/*.xml'
+                    jacoco(
+                          execPattern: 'target/*.exec',
+                          classPattern: 'target/classes',
+                          sourcePattern: 'src/main/java',
+                          exclusionPattern: 'src/test*'
+                    )
+                }
+            }
+        }
+        stage('Javadoc') {
+            steps {
+                sh 'mvn javadoc:javadoc'
+            }
+            post {
+                success {
+                    script {
+                        if (env.BRANCH_NAME == 'master') {
+                            withCredentials(bindings: [sshUserPrivateKey(credentialsId: 'Jenkins', keyFileVariable: 'SSH_KEY')]) {
+                                sh 'ssh -o StrictHostKeyChecking=no -i $SSH_KEY oleksii.milovskiy@35.246.220.71 \
+                                    "rm -rf /srv/java-docs/tmp_deploy/ && mkdir -p /srv/java-docs/tmp_deploy/"'
+
+                                sh 'scp -o StrictHostKeyChecking=no -i $SSH_KEY \
+                                    -r target/site/apidocs oleksii.milovskiy@335.246.220.71:/srv/java-docs/tmp_deploy/'
+
+                                sh 'ssh -o StrictHostKeyChecking=no -i $SSH_KEY oleksii.milovskiy@35.246.220.71 \
+                                    "rm -rf /srv/java-docs/apidocs && mv /srv/java-docs/tmp_deploy/apidocs /srv/java-docs/"'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
