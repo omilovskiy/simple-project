@@ -1,4 +1,4 @@
 # simple-spring-boot-project
-Simple Spring Boot project for demo.
+Simple Spring Boot project with Jenkins configuration for demo.
 
 Starts on localhost:8090
